@@ -1,12 +1,18 @@
 <script setup>
+
+// bridge.java 525:         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+
+
 import useApiRequest from "@/composables/apiRequest";
-import {computed, ref} from "vue";
+import {computed, ref, watchEffect} from "vue";
+import io from 'socket.io-client'
 
 import * as pdfjsLib from 'pdfjs-dist/build/pdf'
 import SwipeDetector from "@/components/SwipeDetector.vue";
-pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist/build/pdf.worker.min.js"
 
-const baseApiUrl = 'http://192.168.1.50:5111'
+pdfjsLib.GlobalWorkerOptions.workerSrc = "/js/pdf.worker.min.js"
+
+const baseApiUrl = ref('http://192.168.1.1:5111')
 
 const currentSongInfo = ref(null)
 
@@ -14,11 +20,25 @@ const songListResponse = await useApiRequest('songlist')
 const songList = ref(songListResponse.sort())
 
 const rawKeyChoice = ref(null)
-const isFemaleKey = computed(() => {
-  return rawKeyChoice.value === 'Female Worship Leader Key'
+const keyChoices = {'Male Worship Leader Key': 'm', 'Female Worship Leader Key': 'f', 'Nashville Number System': 'n'}
+const keyChoice = computed(() => {
+  console.log('rawKeyChoice: ', rawKeyChoice.value)
+  console.log('returning: ', rawKeyChoice.value ? keyChoices[rawKeyChoice.value] : null)
+  return rawKeyChoice.value ? keyChoices[rawKeyChoice.value] : null
 })
 
 
+const socket = io(baseApiUrl.value)
+
+socket.on('update', (data) => {
+  setTimeout(() => {
+    if (data.section !== currentSection.value) {
+      renderPage(whatPageIsSection(data.section))
+      currentSection.value = data.section
+    }
+  }, 500)
+
+})
 
 
 const changeSongPopupPresent = ref(false)
@@ -33,10 +53,12 @@ const currentSection = ref('')
 
 const changeCurrentSong = async (song) => {
   changeSongPopupPresent.value = false
-  currentSongInfo.value = await useApiRequest(song, isFemaleKey)
-  loadPDF(baseApiUrl + '/pdfs/' + currentSongInfo.value.title + '-chords-' + currentSongInfo.value.key + '.pdf')
+  currentSongInfo.value = await useApiRequest(song)
+  let pdfurl = baseApiUrl.value + '/pdfs/' + currentSongInfo.value.title + '-chords-'
+  pdfurl += keyChoice.value
+  pdfurl += '.pdf'
+  loadPDF(pdfurl)
 }
-// await changeCurrentSong('Great Are You Lord')
 
 const pdfViewerDivRef = ref(null)
 
@@ -46,7 +68,10 @@ const pdfViewerDivRef = ref(null)
 let pdfDoc = null;
 
 // Function to render a specific page
-function renderPage(pageNumber) {
+function renderPage(pageNumber, force = false) {
+  if (pageNumber === currentPage.value && !force) {
+    return
+  }
   pdfDoc.getPage(pageNumber).then(function(page) {
     const canvas = pdfViewerDivRef.value
     const context = canvas.getContext('2d');
@@ -73,14 +98,14 @@ function loadPDF(url) {
     pdfDoc = doc;
     totalPages.value = pdfDoc.numPages
 
-    fetch(baseApiUrl + '/updateinfo?' + new URLSearchParams({'song_name': currentSongInfo.value.title, 'section': listOfSectionsInChordChart.value[0]})).then(() => {
+    fetch(baseApiUrl.value + '/updateinfo?' + new URLSearchParams({'song_name': currentSongInfo.value.title, 'section': listOfSectionsInChordChart.value[0]})).then(() => {
       console.log('updated')
     }).catch(() => {
       console.log('error updating')
     })
 
     // Assuming you want to render the first page initially
-    renderPage(1);
+    renderPage(1, true); // Force is true because it's a new document
     currentPage.value = 1
     currentSection.value = listOfSectionsInChordChart.value[0]
   });
@@ -112,7 +137,7 @@ const whatPageIsSection = (section) => {
 const processSectionButtonClick = (section) => {
   renderPage(whatPageIsSection(section))
   currentSection.value = section
-  fetch(baseApiUrl + '/updateinfo?' + new URLSearchParams({'section': section})).then(() => {
+  fetch(baseApiUrl.value + '/updateinfo?' + new URLSearchParams({'section': section})).then(() => {
     console.log('updated')
   }).catch(() => {
     console.log('error updating')
@@ -128,17 +153,118 @@ const listOfSectionsInChordChart = computed(() => {
   }).flat()
 })
 
+const songsDoneAlready = ref([])
+
+const pickRandomSong = () => {
+  if (songsDoneAlready.value.length === songList.value.length) {
+    songsDoneAlready.value = []
+  }
+  console.log('songsDoneAlready = ', songsDoneAlready.value)
+  let songsNotDone = songList.value.filter(element => !songsDoneAlready.value.includes(element))
+  console.log(songsNotDone)
+  newSongSearchBoxValue.value = songsNotDone[Math.floor(Math.random() * songsNotDone.length)]
+  songsDoneAlready.value.push(newSongSearchBoxValue.value)
+}
+
+const helpDialogOpen = ref(false)
+
+const helpClickCounter = ref(0)
+
+watchEffect(() => {
+  let helpCount = helpClickCounter.value
+  if (helpCount >= 15) {
+    advancedDialogOpen.value = true
+    helpClickCounter.value = 0
+  } else {
+    console.log('not enough')
+  }
+})
+
+watchEffect(() => {
+  let helpOpen = helpDialogOpen.value
+  if (!helpOpen) {
+    helpClickCounter.value = 0
+    console.log('reset helpClickCounter')
+  }
+})
+
+const closeHelpDialog = () => {
+  helpDialogOpen.value = false
+  helpClickCounter.value = 0
+}
+
+const advancedDialogOpen = ref(false)
+
+const openChangeSongDialog = () => {
+  changeSongPopupPresent.value = true
+  newSongSearchBoxValue.value = ''
+}
 </script>
 
 <template>
   <main class="mx-2">
+    <v-dialog v-model="helpDialogOpen" width="auto">
+      <v-card>
+        <v-card-title class="text-center" @click="helpClickCounter += 1">Help</v-card-title>
+        <v-card-text>
+          This is the STP Worship tablet. It is used to both show the pdf of a chord chart for the current song, and to
+          control the tv displaying lyrics.<br><br>
+          To start, click the magnifying glass icon in the top right corner to choose
+          a song. Click in the "song name" box and start typing the song name. Select it from the list that appears.
+          If the song is not in the list, please choose another song. Alternatively, you can click the "magic choose"
+          icon to have a song randomly selected. The magic choose feature will select a random song that has not been
+          done recently. Next, select one of three options from the "Key" box. Female/male worship leader key will
+          load the key generally suited for a male or female worship leader. The Nashville Number System will load the
+          chords in the Nashville Number System. Finally, click the "Select" button. The chord chart will load, and
+          it will default to the first section of the song. The TV's title should also update.<br><br>
+          To change the PDF to the correct part of the song and change the lyrics on screen, please select the section
+          at the top of the screen. Alternatively, you can have someone else run the sections part by having them scan
+          the QR code on the wall to run it. They can then select sections for lyrics and pages instead of the worship
+          leader having to.<br><br>
+
+          If you have any questions, please see a TTA (all current TTAs are trained on the system), or contact Luke E.
+          for further assistance or troubleshooting.
+        </v-card-text>
+        <v-card-actions>
+          <div class="d-flex justify-center w-100">
+            <v-btn @click="closeHelpDialog">Close</v-btn>
+          </div>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="advancedDialogOpen" width="auto">
+      <v-card>
+        <v-card-title>Advanced</v-card-title>
+        <v-card-text>
+          <p>If you did not mean to open this dialog, please click the "Close" button below.</p>
+          <v-text-field label="Base API Url" v-model="baseApiUrl"></v-text-field>
+        </v-card-text>
+        <v-card-actions>
+          <div class="d-flex justify-center w-100">
+            <v-btn @click="advancedDialogOpen = false">Close</v-btn>
+          </div>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+
     <v-dialog width="500" v-model="changeSongPopupPresent">
       <v-card title="Change Songs">
         <v-form class="pa-6">
-          <v-autocomplete :items="songList" label="Song Name" v-model="newSongSearchBoxValue"></v-autocomplete>
+          <v-autocomplete
+              :items="songList"
+              label="Song Name"
+
+              v-model="newSongSearchBoxValue"
+          >
+            <template v-slot:append>
+              <v-icon icon="mdi-auto-fix" @click="pickRandomSong"></v-icon>
+            </template>
+          </v-autocomplete>
           <v-select
               label="Key"
-              :items="['Male Worship Leader Key', 'Female Worship Leader Key']"
+              :items="Object.keys(keyChoices)"
               :disabled="!newSongSearchBoxValue"
               v-model="rawKeyChoice"
           ></v-select>
@@ -165,7 +291,7 @@ const listOfSectionsInChordChart = computed(() => {
     <v-card class="" style="">
       <v-row>
         <v-col cols="auto">
-          <v-btn icon="mdi-help" @click="renderPage(2)"></v-btn>
+          <v-btn icon="mdi-help" @click="helpDialogOpen = !helpDialogOpen"></v-btn>
         </v-col>
         <v-col></v-col>
         <v-col cols="auto">
@@ -183,7 +309,7 @@ const listOfSectionsInChordChart = computed(() => {
         </v-col>
         <v-col></v-col>
         <v-col cols="auto">
-          <v-btn icon="mdi-magnify" @click="changeSongPopupPresent = true"></v-btn>
+          <v-btn icon="mdi-magnify" @click="openChangeSongDialog"></v-btn>
         </v-col>
       </v-row>
       <v-card-actions class="d-flex justify-center flex-column my-0 py-0" v-if="currentSongInfo">
@@ -193,7 +319,7 @@ const listOfSectionsInChordChart = computed(() => {
                 <v-col></v-col>
                 <template v-for="(section, index) in listOfSectionsInChordChart.slice(row, (row + 5))" :key="index">
                   <v-col cols="auto">
-                    <v-btn @click="processSectionButtonClick(section)">{{ section }}</v-btn>
+                    <v-btn @click="processSectionButtonClick(section)" :disabled="currentSection === section">{{ section }}</v-btn>
                   </v-col>
                 </template>
 
@@ -208,30 +334,17 @@ const listOfSectionsInChordChart = computed(() => {
         <v-card-text class="mb-0 pb-0">
           <SwipeDetector
               @swipeleft="currentPage !== totalPages ? renderPage(currentPage + 1) : renderPage(currentPage)"
+              @swipeup="currentPage !== totalPages ? renderPage(currentPage + 1) : renderPage(currentPage)"
               @swiperight="currentPage !== 1 ? renderPage(currentPage - 1) : renderPage(currentPage)"
+              @swipedown="currentPage !== 1 ? renderPage(currentPage - 1) : renderPage(currentPage)"
           >
             <div class="d-flex align-content-center justify-center">
-              <canvas ref="pdfViewerDivRef" style="border: 1px solid black; border-radius: 20px; max-height: 85vh; width: 95vw; max-width: 1150px;">
+              <canvas ref="pdfViewerDivRef" style="border: 1px solid black; border-radius: 20px; max-height: 85vh; width: 95vw; max-width: 1000px;">
                 <!-- PDF will be rendered here -->
               </canvas>
             </div>
           </SwipeDetector>
-
         </v-card-text>
-      <!--<v-card-actions class="ma-0 pa-0">
-        <v-row class="ma-0 pa-0">
-          <v-col></v-col>
-          <v-col cols="auto">
-            <v-btn @click="renderPage(currentPage - 1)" variant="text" size="small" class="pa-0 ma-0">
-              <v-icon icon="mdi-menu-left" size="x-large"></v-icon>
-            </v-btn>
-          </v-col>
-          <v-col cols="auto" class="px-0 mx-0">
-            <v-chip >{{currentPage}}</v-chip>
-          </v-col>
-          <v-col></v-col>
-        </v-row>
-      </v-card-actions>-->
 
     </v-card>
   </main>

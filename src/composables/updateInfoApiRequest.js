@@ -6,6 +6,6 @@ export default async function useUpdateInfoApiRequest(section = '', songName = '
     ccliSongNumber: ccliSongNumber
   })
 
-  const rawResponse = await fetch('http://192.168.1.50:5111/updateinfo' + '?' + urlQuery.toString())
+  const rawResponse = await fetch('http://192.168.1.1:5111/updateinfo' + '?' + urlQuery.toString())
   return rawResponse.status === 200
 }

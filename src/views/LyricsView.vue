@@ -3,6 +3,8 @@ import LyricsViewer from "@/components/LyricsViewer.vue";
 import useApiRequest from "@/composables/apiRequest";
 import {ref} from "vue";
 
+const baseApiUrl = 'http://192.168.1.1:5111'
+
 const currentSongInfo = ref({})
 
 currentSongInfo.value = await useApiRequest('currentInfo')
@@ -10,7 +12,7 @@ currentSongInfo.value = await useApiRequest('currentInfo')
 
 import io from 'socket.io-client'
 
-const socket = io('http://192.168.1.50:5111')
+const socket = io(baseApiUrl)
 
 socket.on('update', (data) => {
   currentSongInfo.value = data

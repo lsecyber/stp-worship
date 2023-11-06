@@ -3,23 +3,34 @@ import ControllerButtons from "@/components/ControllerButtons.vue";
 import io from 'socket.io-client'
 import {computed, ref, watch} from "vue";
 import useApiRequest from "@/composables/apiRequest";
+import useUpdateInfoApiRequest from "@/composables/updateInfoApiRequest";
+import FullscreenLoader from "@/App.vue";
+
+const pageIsLoading = ref(true)
 
 const connected = ref(true)
 
-const baseApiUrl = 'http://192.168.1.1:5111'
+const baseApiUrl = import.meta.env.VITE_BASE_API_URL
+
+import {DeviceUUID} from 'device-uuid'
+import SongAndKeySelector from "@/components/SongAndKeySelector.vue";
+const deviceUUID = new DeviceUUID().get() + window.location
 
 // eslint-disable-next-line no-unused-vars
 fetch(baseApiUrl + '/info/currentinfo.json').catch(e => {connected.value = false})
 
-watch(connected, (newVal) => {
-  console.log('watch ran')
-  if (newVal) {
-    console.log('updating socket')
-    socket.value = io(baseApiUrl)
-  }
-}, {deep: true})
 
-const socket = ref(io(baseApiUrl))
+const socket = io(baseApiUrl)
+
+
+const songListResponse = await useApiRequest('songlist')
+const songList = ref(songListResponse.sort())
+
+const songsDoneAlreadyString = ref('')
+const previousKeyChoice = ref('n')
+
+
+
 async function fetchWithTimeout(resource, timeToTimeout = 5000, options = {}) {
   const { timeout = timeToTimeout } = options;
 
@@ -53,20 +64,25 @@ const currentSection = computed(() => {
 const updateInfo = async (songInfo = null) => {
   currentSongInfo.value = songInfo ? songInfo : await useApiRequest('currentInfo')
   let songName = currentSongInfo.value['song_name']
-  const rawResponse = await fetchWithTimeout(baseApiUrl + '/info/' + songName + '--songinfo.json').catch(e => {connected.value = false})
+  const rawResponse = await fetchWithTimeout(baseApiUrl + '/info/' + songName + '--songinfo.json')
   if (connected.value) {
     currentSongInfoFile.value = await rawResponse.json()
-
+    if (currentSongInfoFile.value?.keyChoice !== previousKeyChoice.value && currentSongInfoFile.value?.keyChoice !== '') {
+      previousKeyChoice.value = currentSongInfoFile.value?.keyChoice
+    }
   }
-
-  console.log('updated')
 }
 
 await updateInfo()
 
-socket.value.on('update', async (data) => {
+socket.on('update', async (data) => {
   connected.value = true
-  await updateInfo(data)
+  if (data['deviceUUID'] !== deviceUUID) {
+    await updateInfo(data)
+  } else {
+    console.log('Ignoring update because source is self.')
+  }
+
 })
 
 const sections = computed(() => {
@@ -78,30 +94,62 @@ const sections = computed(() => {
   }).flat()
 })
 
-const handleClick = (section) => {
-  fetchWithTimeout(baseApiUrl + '/updateinfo?' + new URLSearchParams({'section': section})).then(() => {
-    console.log('updated to: ', section)
+
+const updateSectionAndOrSong = async (song, section='', key='') => {
+  useUpdateInfoApiRequest(section, song, '', '', key).then(() => {
+    console.log('updated')
   }).catch(() => {
     console.log('error updating')
-    connected.value = false
   })
+}
+
+const handleSectionClick = (section) => {
+  pageIsLoading.value = true
+  updateSectionAndOrSong('', section, previousKeyChoice.value)
+  setTimeout(() => {
+    console.log('done loading')
+    pageIsLoading.value = false
+  }, 1000)
 }
 
 console.log('done!!')
 
 const helpDialogOpen = ref(false)
+
+
+// Below is for SongAndKeySelector.
+
+
+const processNewSong = (choice) => {
+  updateSectionAndOrSong(choice.song, '', choice.key)
+  songsDoneAlreadyString.value = choice.songsCompleted
+  previousKeyChoice.value = choice.key
+}
+const songSelectorIsOpen = ref(false)
+// End for SongAndKeySelector
+
+pageIsLoading.value = false
 </script>
 
 <template>
+  <FullscreenLoader v-model="pageIsLoading" />
+
   <v-app>
     <v-container class="w-100 h-100">
       <v-app-bar>
-        <v-spacer></v-spacer>
-        <v-app-bar-title class="text-center">
+        <template #prepend>
+          <v-btn icon @click="helpDialogOpen = !helpDialogOpen"><v-icon>mdi-help</v-icon></v-btn>
+
+        </template>
+
+        <v-app-bar-title class="text-center" style="font-size: 1rem;">
           {{currentSongInfo?.song_name ? currentSongInfo?.song_name : 'STP Worship Controller'}}
         </v-app-bar-title>
-        <v-spacer></v-spacer>
-        <v-btn icon @click="helpDialogOpen = !helpDialogOpen"><v-icon>mdi-help</v-icon></v-btn>
+
+        <template #append>
+          <v-btn icon @click="songSelectorIsOpen = true"><v-icon>mdi-magnify</v-icon></v-btn>
+
+        </template>
       </v-app-bar>
 
       <v-main>
@@ -111,13 +159,15 @@ const helpDialogOpen = ref(false)
             <v-card-title class="text-center">Help</v-card-title>
             <v-alert type="info">
               <v-alert-title>Experiencing a problem?</v-alert-title>
-              <p>Before any other troubleshooting steps, please ensure you are connected to the "STPWorship" WiFi, and refresh the page.</p>
+              <p>Try rebooting the phone. This can be done by holding down the lock button on the side and choosing "Reboot" when the options appear. A simple restart can fix many issues!</p>
             </v-alert>
             <v-card-text>
               This is a simple controller for the STP worship system. It is not for showing the chords or lyrics.
               This page is commonly used by another person than the worship leader to control the lyrics if the worship
               leader has a two-hand instrument such as guitar. The buttons on this page have the same function as the
-              buttons at the top of the chords tablet.
+              buttons at the top of the chords tablet.<br><br>
+              You can also change the current song from this phone by clicking the magnifying glass in the top right.<br><br>
+              If you have further problems, please contact Luke E at (910) 264-6503.
             </v-card-text>
             <v-card-actions>
               <div class="d-flex justify-center w-100">
@@ -128,11 +178,20 @@ const helpDialogOpen = ref(false)
         </v-dialog>
 
 
+        <SongAndKeySelector
+            :songs="songList"
+            :songs-done-already-string="songsDoneAlreadyString"
+            :previous-key-choice="previousKeyChoice"
+            @choice="processNewSong"
+            v-model="songSelectorIsOpen"
+        />
+
+
         <template v-if="connected">
-          <ControllerButtons :sections="sections" :current-section="currentSection" @section-button-click="handleClick"/>
+          <ControllerButtons :sections="sections" :current-section="currentSection" @section-button-click="handleSectionClick"/>
         </template>
         <template v-else>
-          <v-alert type="error" title="Not Connected">You are disconnected from the controller. Please ensure you are connected to the "STPWorship" WiFi.</v-alert>
+          <v-alert type="error" title="Not Connected">You are disconnected from the controller. Please try again in a few minutes, or click the "?" button in the top right for help.</v-alert>
         </template>
       </v-main>
 

@@ -13,6 +13,8 @@
     "@capacitor/core": "^5.5.0",
     "@capacitor/ios": "^5.5.0",
     "@mdi/font": "^7.3.67",
+    "@vueuse/core": "^10.5.0",
+    "device-uuid": "^1.0.4",
     "pdfjs-dist": "^3.11.174",
     "pinia": "^2.1.6",
     "socket.io-client": "^4.7.2",

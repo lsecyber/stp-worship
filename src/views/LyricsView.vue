@@ -3,7 +3,7 @@ import LyricsViewer from "@/components/LyricsViewer.vue";
 import useApiRequest from "@/composables/apiRequest";
 import {ref} from "vue";
 
-const baseApiUrl = 'http://192.168.1.1:5111'
+const baseApiUrl = import.meta.env.VITE_BASE_API_URL
 
 const currentSongInfo = ref({})
 

@@ -24,6 +24,8 @@ const handleTouchEnd = (event) => {
 }
 
 const handleGesture = () => {
+  console.log('Handling Gesture inside SwipeDetector')
+
   const distanceX = touchEndX.value - touchStartX.value
   const distanceY = touchEndY.value - touchStartY.value
   if (Math.abs(distanceX) > Math.abs(distanceY)) {

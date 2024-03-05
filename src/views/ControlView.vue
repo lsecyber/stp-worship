@@ -12,9 +12,39 @@ const connected = ref(true)
 
 const baseApiUrl = import.meta.env.VITE_BASE_API_URL
 
-import {DeviceUUID} from 'device-uuid'
 import SongAndKeySelector from "@/components/SongAndKeySelector.vue";
-const deviceUUID = new DeviceUUID().get() + window.location
+
+// Start Random String UUID Functions
+const generateRandomString = () => {
+  return Math.random().toString(36).substr(2)
+}
+const generateUniqueId = () => {
+  const timestamp = Date.now().toString(36)
+  return timestamp + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+}
+const saveNewUniqueId = () => {
+  const uniqueId = generateUniqueId()
+  localStorage.setItem('uniqueId', uniqueId)
+  return uniqueId
+}
+const getUniqueId = () => {
+  let uniqueId = localStorage.getItem('uniqueId')
+  if (!uniqueId) {
+    uniqueId = saveNewUniqueId()
+  }
+  return uniqueId
+}
+const deviceUUID = computed(() => {
+  return getUniqueId() + window.location
+})
+// End Random String UUID Functions
 
 // eslint-disable-next-line no-unused-vars
 fetch(baseApiUrl + '/info/currentinfo.json').catch(e => {connected.value = false})
@@ -77,7 +107,7 @@ await updateInfo()
 
 socket.on('update', async (data) => {
   connected.value = true
-  if (data['deviceUUID'] !== deviceUUID) {
+  if (data.source !== deviceUUID.value || data.section !== currentSongInfoFile.value?.section) {
     await updateInfo(data)
   } else {
     console.log('Ignoring update because source is self.')

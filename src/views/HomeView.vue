@@ -14,11 +14,41 @@ import SwipeDetector from "@/components/SwipeDetector.vue";
 import SongAndKeySelector from "@/components/SongAndKeySelector.vue";
 import FullscreenLoader from "@/components/FullscreenLoader.vue";
 
-import {DeviceUUID} from 'device-uuid'
 
+// Start Random String UUID Functions
+const generateRandomString = () => {
+  return Math.random().toString(36).substr(2)
+}
+const generateUniqueId = () => {
+  const timestamp = Date.now().toString(36)
+  return timestamp + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+      + generateRandomString()
+}
+const saveNewUniqueId = () => {
+  const uniqueId = generateUniqueId()
+  localStorage.setItem('uniqueId', uniqueId)
+  return uniqueId
+}
+const getUniqueId = () => {
+  let uniqueId = localStorage.getItem('uniqueId')
+  if (!uniqueId) {
+    uniqueId = saveNewUniqueId()
+  }
+  return uniqueId
+}
+const deviceUUID = computed(() => {
+  console.log('3434343434343434343434343434 returning: ', getUniqueId() + window.location)
+  console.log('3434343434343434343434343434 returning: ', getUniqueId() + window.location)
 
-const deviceUUID = new DeviceUUID().get() + window.location
-
+  return getUniqueId() + window.location
+})
+// End Random String UUID Functions
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/js/pdf.worker.min.js"
 
@@ -33,8 +63,8 @@ const songList = ref(songListResponse.sort())
 const socket = io(baseApiUrl.value)
 
 socket.on('update', (data) => {
-  console.log('socket.on fired!!!')
-  if (data.source !== deviceUUID) {
+  console.log('socket.on fired!!! data: ', data)
+  if (data.source !== deviceUUID.value) {
     setTimeout(async () => {
       if (data.keyChoice && data.keyChoice !== previousKeyChoice.value && data.keyChoice !== '') {
         previousKeyChoice.value = data.keyChoice
@@ -90,8 +120,10 @@ const changeCurrentSong = async (song, key, emitUpdateInfo = true) => {
       console.log('just updated!!!!!!!!!')
       console.log('loading pdfurl: ', pdfurl)
       loadPDF(pdfurl)
-    }).catch(() => {
-      console.log('error updating')
+    }).catch((e) => {
+      console.log('error updating line 124')
+      console.log('full error: ')
+      console.log(e)
     })
   } else {
     loadPDF(pdfurl)
@@ -158,8 +190,10 @@ function loadPDF(url) {
 
     useUpdateInfoApiRequest(listOfSectionsInChordChart.value[0], currentSongInfo.value.title).then(() => {
       console.log('updated')
-    }).catch(() => {
-      console.log('error updating')
+    }).catch((e) => {
+      console.log('error updating line 194')
+      console.log('full error: ')
+      console.log(e)
     })
 
     // Assuming you want to render the first page initially
@@ -203,8 +237,10 @@ const processSectionButtonClick = (section) => {
   currentSection.value = section
   useUpdateInfoApiRequest(section).then(() => {
     console.log('updated')
-  }).catch(() => {
-    console.log('error updating')
+  }).catch((e) => {
+    console.log('error updating line 241')
+    console.log('full error: ')
+    console.log(e)
   })
 }
 

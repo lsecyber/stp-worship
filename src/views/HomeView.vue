@@ -275,14 +275,6 @@ const processNewSong = (choice) => {
 const songSelectorIsOpen = ref(false)
 // End for SongAndKeySelector
 
-const refreshPage = () => {
-  pageIsLoading.value = true
-  setTimeout(() => {
-    window.location.reload()
-  }, 1000)
-
-}
-
 pageIsLoading.value = false
 </script>
 
@@ -296,11 +288,10 @@ pageIsLoading.value = false
           <v-alert type="info">
             <v-alert-title>Experiencing a problem?</v-alert-title>
             <p>
-              First, try clicking the below button to reload the app. If that doesn't work, try rebooting the phone.
+              First, try rebooting the controller.
               This can be done by holding down the lock button on the side and choosing "Reboot" when the options
               appear. A simple restart can fix many issues!
             </p>
-            <v-btn @click="refreshPage()">Reload App</v-btn>
           </v-alert>
           <br>
           This is the STP Worship tablet. It is used to both show the pdf of a chord chart for the current song, and to
@@ -387,7 +378,11 @@ pageIsLoading.value = false
               @swiperight="currentPage !== 1 ? renderPage(currentPage - 1) : renderPage(currentPage)"
               @swipedown="currentPage !== 1 ? renderPage(currentPage - 1) : renderPage(currentPage)"
           >
+            <v-alert v-if="!currentSongInfo || JSON.stringify(currentSongInfo) === '{}'" type="success" class="text-center mb-4">
+              <b>Connected and working!</b><br> Please select a song by selecting the magnifying glass in the top right to begin or click the "?" for help.
+            </v-alert>
             <div class="d-flex align-content-center justify-center">
+
               <canvas ref="pdfViewerDivRef" style="border: 1px solid black; border-radius: 20px; max-height: 85vh; width: 95vw; max-width: 1000px;">
                 <!-- PDF will be rendered here -->
               </canvas>

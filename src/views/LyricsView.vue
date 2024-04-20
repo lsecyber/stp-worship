@@ -21,7 +21,7 @@ socket.on('update', (data) => {
 </script>
 
 <template>
-  <div class="w-100 h-100">
+  <div class="w-100 h-100 no-cursor">
     <div class="d-flex justify-center align-center">
       <LyricsViewer
           :name="currentSongInfo?.song_name"
@@ -33,3 +33,9 @@ socket.on('update', (data) => {
 
   </div>
 </template>
+
+<style>
+.no-cursor {
+  cursor: none;
+}
+</style>
